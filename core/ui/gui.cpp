@@ -2187,6 +2187,9 @@ static void gui_settings_video()
 		renderApi = 3;
 		perPixel = true;
 		break;
+	case RenderType::Metal:
+		renderApi = 4;
+		perPixel = true;
 	}
 
 	constexpr int apiCount = 0
@@ -2200,6 +2203,9 @@ static void gui_settings_video()
 			+ 1
 		#endif
 		#ifdef USE_DX11
+			+ 1
+		#endif
+		#ifdef USE_METAL
 			+ 1
 		#endif
 			;
@@ -2216,13 +2222,19 @@ static void gui_settings_video()
 #endif
 #ifdef USE_VULKAN
 #ifdef __APPLE__
-			ImGui::RadioButton("Vulkan (Metal)", &renderApi, 1);
+			ImGui::RadioButton("Vulkan (MoltenVK)", &renderApi, 1);
 			ImGui::SameLine(0, innerSpacing);
 			ShowHelpMarker("MoltenVK: An implementation of Vulkan that runs on Apple's Metal graphics framework");
 #else
 			ImGui::RadioButton("Vulkan", &renderApi, 1);
 #endif // __APPLE__
 			ImGui::NextColumn();
+#endif
+#ifdef USE_METAL
+#ifdef __APPLE__
+			ImGui::RadioButton("Metal", &renderApi, 4);
+			ImGui::NextColumn();
+#endif
 #endif
 #ifdef USE_DX9
 			{
@@ -2554,6 +2566,8 @@ static void gui_settings_video()
     case 3:
     	config::RendererType = perPixel ? RenderType::DirectX11_OIT : RenderType::DirectX11;
     	break;
+    	case 4:
+		config::RendererType = RenderType::Metal;
     }
 }
 
