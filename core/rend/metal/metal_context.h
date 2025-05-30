@@ -22,7 +22,9 @@
 #include <Metal/Metal.h>
 #include <QuartzCore/QuartzCore.h>
 
+#include "rend/transform_matrix.h"
 #include "wsi/context.h"
+#include "metal_quad.h"
 
 class MetalContext : public GraphicsContext
 {
@@ -32,8 +34,15 @@ public:
 
     bool init();
     void term() override;
-    void resize() override;
+
+    void resize() override { resized = true; }
+    bool IsValid() { return width != 0 && height != 0; }
+    void NewFrame();
+    void BeginRenderPass();
     void Present();
+    void PresentFrame(id<MTLTexture> texture, MTLViewport viewport, float aspectRatio);
+    void PresentLastFrame();
+    bool GetLastFrame(std::vector<u8>& data, int& width, int& height);
 
     id<MTLDevice> GetDevice() const { return device; }
     CAMetalLayer* GetLayer() const { return layer; }
@@ -52,9 +61,40 @@ public:
     bool hasPerPixel() override {
         return true;
     }
+    bool recreateSwapChainIfNeeded();
 
     static MetalContext* Instance() { return contextInstance; }
 private:
+    void CreateSwapChain();
+    void DrawFrame(id<MTLTexture> texture, MTLViewport viewport, float aspectRatio);
+
+    bool HasSurfaceDimensionChanged() const;
+    void SetWindowSize(u32 width, u32 height);
+
+    bool rendering = false;
+    bool renderDone = false;
+    u32 width = 0;
+    u32 height = 0;
+    bool resized = false;
+    bool swapOnVSync = true;
+    int swapInterval = 1;
+
+    std::vector<id<CAMetalDrawable>> drawables;
+    u32 currentImage = 0;
+
+    std::vector<id<MTLCommandBuffer>> commandBuffers;
+    id<MTLRenderCommandEncoder> commandEncoder;
+
+    std::unique_ptr<MetalQuadPipeline> quadPipelineWithAlpha;
+    std::unique_ptr<MetalQuadPipeline> quadPipeline;
+    std::unique_ptr<MetalQuadPipeline> quadRotatePipeline;
+    std::unique_ptr<MetalQuadDrawer> quadDrawer;
+    std::unique_ptr<MetalQuadDrawer> quadRotateDrawer;
+
+    id<MTLTexture> lastFrameTexture = nil;
+    MTLViewport lastFrameViewport;
+    float lastFrameAR = 0.f;
+
     id<MTLDevice> device = nil;
     id<MTLCommandQueue> queue = nil;
     CAMetalLayer* layer;
