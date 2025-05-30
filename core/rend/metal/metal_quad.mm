@@ -39,6 +39,22 @@ void MetalQuadPipeline::CreatePipeline()
     [color setWriteMask:MTLColorWriteMaskAll];
     [color setPixelFormat:MTLPixelFormatRGBA8Unorm];
 
+    MTLVertexDescriptor *vertexDescriptor = [[MTLVertexDescriptor alloc] init];
+    auto pos = vertexDescriptor.attributes[0];
+    [pos setFormat:MTLVertexFormatFloat3];
+    [pos setBufferIndex:0];
+    [pos setOffset:offsetof(MetalQuadVertex, x)];
+
+    auto uv = vertexDescriptor.attributes[1];
+    [uv setFormat:MTLVertexFormatFloat2];
+    [uv setBufferIndex:0];
+    [uv setOffset:offsetof(MetalQuadVertex, u)];
+
+    auto layout = vertexDescriptor.layouts[0];
+    [layout setStride:sizeof(MetalQuadVertex)];
+
+    [pipelineDescriptor setVertexDescriptor:vertexDescriptor];
+
     NSError *error = nil;
     pipeline = [MetalContext::Instance()->GetDevice() newRenderPipelineStateWithDescriptor:pipelineDescriptor error:&error];
 
@@ -73,6 +89,11 @@ void MetalQuadPipeline::Init(MetalShaders *shaderManager)
         [samplerDescriptor setRAddressMode:MTLSamplerAddressModeClampToEdge];
         nearestSampler = [MetalContext::Instance()->GetDevice() newSamplerStateWithDescriptor:samplerDescriptor];
     }
+}
+
+void MetalQuadDrawer::Init(MetalQuadPipeline *pipeline) {
+    this->pipeline = pipeline;
+    buffer = std::make_unique<MetalQuadBuffer>();
 }
 
 void MetalQuadDrawer::Draw(id<MTLRenderCommandEncoder> commandEncoder, id<MTLTexture> texture, MetalQuadVertex *vertices, bool nearestFilter, const float *color)

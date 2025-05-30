@@ -47,12 +47,12 @@ void MetalContext::CreateSwapChain()
         swapInterval = 1;
 
     commandBuffers.resize(3);
-    drawables.resize(3);
 
-    for (int i = 0; i < 3; i++)
-    {
-        // drawables[i] = [layer nextDrawable];
-    }
+    quadPipeline->Init(shaderManager.get());
+    quadPipelineWithAlpha->Init(shaderManager.get());
+    quadDrawer->Init(quadPipeline.get());
+    quadRotatePipeline->Init(shaderManager.get());
+    quadRotateDrawer->Init(quadRotatePipeline.get());
 
     currentImage = 2;
 
@@ -89,6 +89,7 @@ bool MetalContext::init()
     [layer setDevice:device];
     queue = [device newCommandQueue];
 
+    shaderManager = std::make_unique<MetalShaders>();
     quadPipeline = std::make_unique<MetalQuadPipeline>(true, false);
     quadPipelineWithAlpha = std::make_unique<MetalQuadPipeline>(false, false);
     quadDrawer = std::make_unique<MetalQuadDrawer>();
@@ -217,7 +218,7 @@ bool MetalContext::HasSurfaceDimensionChanged() const
 
 void MetalContext::SetWindowSize(u32 width, u32 height)
 {
-    if (this->width == width && this->height == height)
+    if (this->width != width && this->height != height)
     {
         this->width = width;
         this->height = height;

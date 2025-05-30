@@ -79,7 +79,6 @@ private:
     bool swapOnVSync = true;
     int swapInterval = 1;
 
-    std::vector<id<CAMetalDrawable>> drawables;
     u32 currentImage = 0;
 
     std::vector<id<MTLCommandBuffer>> commandBuffers;
@@ -90,6 +89,7 @@ private:
     std::unique_ptr<MetalQuadPipeline> quadRotatePipeline;
     std::unique_ptr<MetalQuadDrawer> quadDrawer;
     std::unique_ptr<MetalQuadDrawer> quadRotateDrawer;
+    std::unique_ptr<MetalShaders> shaderManager;
 
     id<MTLTexture> lastFrameTexture = nil;
     MTLViewport lastFrameViewport;

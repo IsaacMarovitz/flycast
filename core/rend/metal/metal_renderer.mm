@@ -103,8 +103,22 @@ void BaseMetalRenderer::RenderFramebuffer(const FramebufferInfo &info)
         curTexture = std::make_unique<MetalTexture>();
         curTexture->tex_type = TextureType::_8888;
     }
+    if (info.fb_r_ctrl.fb_enable == 0 || info.vo_control.blank_video == 1)
+    {
+        // Video output disabled
+        u8 rgba[]{ (u8)info.vo_border_col._red, (u8)info.vo_border_col._green, (u8)info.vo_border_col._blue, 255 };
+        curTexture->UploadToGPU(1, 1, rgba, false);
+    }
+    else
+    {
+        PixelBuffer<u32> pb;
+        int width;
+        int height;
+        ReadFramebuffer(info, pb, width, height);
 
-    curTexture->SetCommandBuffer(nil);
+        curTexture->UploadToGPU(width, height, (u8*)pb.data(), false);
+    }
+
     framebufferRendered = true;
     clearLastFrame = false;
 }

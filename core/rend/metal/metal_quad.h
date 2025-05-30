@@ -21,6 +21,7 @@
 
 #include <Metal/Metal.h>
 #include "metal_shaders.h"
+#include "metal_buffer.h"
 
 struct MetalQuadVertex
 {
@@ -33,12 +34,12 @@ class MetalQuadBuffer
 public:
     MetalQuadBuffer()
     {
-
+        buffer = std::make_unique<MetalBufferData>(sizeof(MetalQuadVertex) * 4);
     }
 
     void Bind(id<MTLRenderCommandEncoder> commandEncoder)
     {
-        [commandEncoder setVertexBuffer:buffer offset:0 atIndex:0];
+        [commandEncoder setVertexBuffer:buffer->buffer offset:0 atIndex:0];
     }
 
     void Draw(id<MTLRenderCommandEncoder> commandEncoder)
@@ -60,10 +61,10 @@ public:
             vertices = defaultVtx;
         };
 
-        memcpy([buffer contents], vertices, sizeof(MetalQuadVertex) * 4);
+        memcpy([buffer->buffer contents], vertices, sizeof(MetalQuadVertex) * 4);
     }
 private:
-    id<MTLBuffer> buffer;
+    std::unique_ptr<MetalBufferData> buffer;
 };
 
 class MetalQuadPipeline
