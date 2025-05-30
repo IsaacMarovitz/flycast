@@ -51,7 +51,7 @@ void MetalContext::CreateSwapChain()
 
     for (int i = 0; i < 3; i++)
     {
-        drawables[i] = [layer nextDrawable];
+        // drawables[i] = [layer nextDrawable];
     }
 
     currentImage = 2;
