@@ -39,6 +39,7 @@ public:
     bool IsValid() { return width != 0 && height != 0; }
     void NewFrame();
     void BeginRenderPass();
+    void EndFrame();
     void Present();
     void PresentFrame(id<MTLTexture> texture, MTLViewport viewport, float aspectRatio);
     void PresentLastFrame();

@@ -159,20 +159,24 @@ void MetalContext::NewFrame() {
     if (!IsValid())
         return;
 
-    if (rendering) {
-        [commandEncoder endEncoding];
-        commandEncoder = nil;
-        rendering = false;
-        renderDone = true;
-    }
-
-    if (currentImage < commandBuffers.size() && commandBuffers[currentImage]) {
-        [commandBuffers[currentImage] commit];
-        commandBuffers[currentImage] = nil;
-    }
-
     currentImage = (currentImage + 1) % 3;
     currentDrawable = nil;
+    verify(!rendering);
+    rendering = true;
+}
+
+void MetalContext::EndFrame() {
+    if (!IsValid())
+        return;
+
+    [commandEncoder endEncoding];
+    [commandBuffers[currentImage] commit];
+    [commandBuffers[currentImage] waitUntilCompleted];
+    commandBuffers[currentImage] = nil;
+
+    verify(rendering);
+    rendering = false;
+    renderDone = true;
 }
 
 void MetalContext::Present()
@@ -253,8 +257,8 @@ void MetalContext::PresentFrame(id<MTLTexture> texture, MTLViewport viewport, fl
         if (lastFrameTexture != nil) // Might have been nullified if swap chain recreated
             DrawFrame(texture, viewport, aspectRatio);
 
-        [commandEncoder endEncoding];
         imguiDriver->renderDrawData(ImGui::GetDrawData(), false);
+        EndFrame();
     }
     else {
         if (!IsValid())
