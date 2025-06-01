@@ -166,7 +166,6 @@ void MetalContext::NewFrame() {
         renderDone = true;
     }
 
-    // Commit the current command buffer
     if (currentImage < commandBuffers.size() && commandBuffers[currentImage]) {
         [commandBuffers[currentImage] commit];
         commandBuffers[currentImage] = nil;
@@ -247,9 +246,9 @@ void MetalContext::PresentFrame(id<MTLTexture> texture, MTLViewport viewport, fl
     {
         NewFrame();
 
-        gui_draw_osd();
-
         BeginRenderPass();
+
+        gui_draw_osd();
 
         if (lastFrameTexture != nil) // Might have been nullified if swap chain recreated
             DrawFrame(texture, viewport, aspectRatio);

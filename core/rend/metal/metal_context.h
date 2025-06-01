@@ -47,6 +47,9 @@ public:
     id<MTLDevice> GetDevice() const { return device; }
     CAMetalLayer* GetLayer() const { return layer; }
     id<MTLCommandQueue> GetQueue() const { return queue; }
+    MTLRenderPassDescriptor* GetDescriptor() const { return renderPassDescriptor; }
+    id<MTLRenderCommandEncoder> GetEncoder() const { return commandEncoder; }
+    id<MTLCommandBuffer> GetCommandBuffer() const { return commandBuffers[currentImage]; }
 
     std::string getDriverName() override;
 
