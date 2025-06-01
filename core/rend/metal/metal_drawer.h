@@ -162,7 +162,7 @@ public:
         if (!frameRendered)
             return false;
         frameRendered = false;
-        MetalContext::Instance()->PresentFrame(nil, viewport, aspectRatio);
+        MetalContext::Instance()->PresentFrame(framebuffers[GetCurrentImage()], viewport, aspectRatio);
 
         return true;
     }
@@ -200,6 +200,7 @@ private:
 
     MetalTexture *texture = nullptr;
     std::vector<id<MTLTexture>> framebuffers;
+    MTLRenderPassDescriptor *rttPassDescriptor = nil;
     id<MTLTexture> colorAttachment;
     id<MTLTexture> depthAttachment;
     MetalTextureCache *textureCache = nullptr;

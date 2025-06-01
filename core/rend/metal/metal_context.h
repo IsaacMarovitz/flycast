@@ -81,6 +81,9 @@ private:
 
     u32 currentImage = 0;
 
+    id<CAMetalDrawable> currentDrawable = nil;
+    MTLRenderPassDescriptor *renderPassDescriptor = nil;
+
     std::vector<id<MTLCommandBuffer>> commandBuffers;
     id<MTLRenderCommandEncoder> commandEncoder;
 

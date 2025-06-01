@@ -252,7 +252,6 @@ private:
 		}
     }
 
-    MetalShaders *shaderManager;
     id<MTLRenderPipelineState> blitPassPipeline = nil;
     std::map<u64, id<MTLRenderPipelineState>> pipelines;
     std::map<u32, id<MTLRenderPipelineState>> modVolPipelines;
@@ -261,6 +260,9 @@ private:
     std::map<u32, id<MTLDepthStencilState>> modVolStencilStates;
     std::map<u64, id<MTLDepthStencilState>> depthStencilStates;
     std::map<u32, id<MTLDepthStencilState>> depthPassDepthStencilStates;
+
+protected:
+    MetalShaders *shaderManager;
 };
 
 static const MTLCompareFunction depthOps[] =

@@ -32,6 +32,11 @@ public:
     id<MTLTexture> GetTexture() const { return texture; }
     void UploadToGPU(int width, int height, const u8 *data, bool mipmapped, bool mipmapsIncluded = false) override;
     void SetCommandBuffer(id<MTLCommandBuffer> commandBuffer) { this->commandBuffer = commandBuffer; }
+    void SetTexture(id<MTLTexture> texture, u32 width, u32 height) {
+        this->texture = texture;
+        this->width = width;
+        this->height = height;
+    }
     bool Delete() override;
 
 private:

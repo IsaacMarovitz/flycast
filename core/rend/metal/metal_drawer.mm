@@ -323,14 +323,6 @@ void MetalDrawer::UploadMainBuffer(const MetalVertexShaderUniforms &vertexUnifor
     curMainBuffer = buffer->buffer;
 }
 
-void MetalTextureDrawer::Init(MetalSamplers *samplers, MetalShaders *shaders, MetalTextureCache *textureCache)
-{
-    // TODO: Proper pipelines
-    MetalDrawer::Init(samplers, MetalPipelineManager(shaders));
-
-    this->textureCache = textureCache;
-}
-
 bool MetalDrawer::Draw(const MetalTexture *fogTexture, const MetalTexture *paletteTexture, id<MTLCommandBuffer> commandBuffer) {
     MetalFragmentShaderUniforms fragUniforms = MakeFragmentUniforms<MetalFragmentShaderUniforms>();
     dithering = config::EmulateFramebuffer && pvrrc.fb_W_CTRL.fb_dither && pvrrc.fb_W_CTRL.fb_packmode <= 3;
@@ -419,6 +411,15 @@ bool MetalDrawer::Draw(const MetalTexture *fogTexture, const MetalTexture *palet
     return !pvrrc.isRTT;
 }
 
+void MetalTextureDrawer::Init(MetalSamplers *samplers, MetalShaders *shaders, MetalTextureCache *textureCache)
+{
+    MetalDrawer::Init(samplers, MetalPipelineManager(shaders));
+
+    this->textureCache = textureCache;
+
+    rttPassDescriptor = [[MTLRenderPassDescriptor alloc] init];
+}
+
 id<MTLRenderCommandEncoder> MetalTextureDrawer::BeginRenderPass(id<MTLCommandBuffer> commandBuffer) {
     DEBUG_LOG(RENDERER, "RenderToTexture packmode=%d stride=%d - %d x %d @ %06x", pvrrc.fb_W_CTRL.fb_packmode, pvrrc.fb_W_LINESTRIDE * 8,
               pvrrc.fb_X_CLIP.max + 1, pvrrc.fb_Y_CLIP.max + 1, pvrrc.fb_W_SOF1 & VRAM_MASK);
@@ -433,37 +434,105 @@ id<MTLRenderCommandEncoder> MetalTextureDrawer::BeginRenderPass(id<MTLCommandBuf
     u32 heightPow2;
     getRenderToTextureDimensions(upscaledWidth, upscaledHeight, widthPow2, heightPow2);
 
-    id<MTLRenderCommandEncoder> commandEncoder = [commandBuffer renderCommandEncoderWithDescriptor:nil];
+    if (!depthAttachment || widthPow2 > depthAttachment.width || heightPow2 > depthAttachment.height)
+    {
+        MTLTextureDescriptor *depthDescriptor = [[MTLTextureDescriptor alloc] init];
+        depthDescriptor.width = widthPow2;
+        depthDescriptor.height = heightPow2;
+        depthDescriptor.pixelFormat = MTLPixelFormatDepth32Float_Stencil8;
+        depthDescriptor.usage = MTLTextureUsageRenderTarget;
+        depthDescriptor.storageMode = MTLStorageModePrivate;
+
+        depthAttachment = [MetalContext::Instance()->GetDevice() newTextureWithDescriptor:depthDescriptor];
+        [depthAttachment setLabel:@"Rtt Depth Attachment"];
+    }
+
+    id<MTLTexture> colorImage;
 
     if (!config::RenderToTextureBuffer)
     {
         texture = textureCache->getRTTexture(textureAddr, pvrrc.fb_W_CTRL.fb_packmode, origWidth, origHeight);
+
+        // Check if we need to recreate the texture
+        bool needsRecreation = !texture->GetTexture() ||
+                               texture->GetTexture().width != widthPow2 ||
+                               texture->GetTexture().height != heightPow2;
+
+        if (needsRecreation)
+        {
+            MTLTextureDescriptor *colorDescriptor = [[MTLTextureDescriptor alloc] init];
+            colorDescriptor.width = widthPow2;
+            colorDescriptor.height = heightPow2;
+            colorDescriptor.pixelFormat = MTLPixelFormatRGBA8Unorm;
+            colorDescriptor.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
+            colorDescriptor.storageMode = MTLStorageModePrivate;
+
+            id<MTLTexture> newTexture = [MetalContext::Instance()->GetDevice() newTextureWithDescriptor:colorDescriptor];
+            [newTexture setLabel:@"Rtt Color Attachment"];
+            texture->SetTexture(newTexture, widthPow2, heightPow2);
+        }
+        colorImage = texture->GetTexture();
     }
     else
     {
+        if (!colorAttachment || widthPow2 > colorAttachment.width || heightPow2 > colorAttachment.height)
+        {
+            MTLTextureDescriptor *colorDescriptor = [[MTLTextureDescriptor alloc] init];
+            colorDescriptor.width = widthPow2;
+            colorDescriptor.height = heightPow2;
+            colorDescriptor.pixelFormat = MTLPixelFormatRGBA8Unorm;
+            colorDescriptor.usage = MTLTextureUsageRenderTarget;
+            colorDescriptor.storageMode = MTLStorageModePrivate;
 
+            colorAttachment = [MetalContext::Instance()->GetDevice() newTextureWithDescriptor:colorDescriptor];
+            [colorAttachment setLabel:@"Rtt Color Attachment"];
+        }
+        colorImage = colorAttachment;
     }
 
-    width = widthPow2;
-    height = heightPow2;
+    auto colorAttachmentDesc = rttPassDescriptor.colorAttachments[0];
+    [colorAttachmentDesc setTexture:colorImage];
+    [colorAttachmentDesc setLoadAction:MTLLoadActionClear];
+    [colorAttachmentDesc setStoreAction:MTLStoreActionStore];
+    [colorAttachmentDesc setClearColor:MTLClearColorMake(0.0, 0.0, 0.0, 1.0)];
 
-    framebuffers.resize(3);
-    framebuffers[GetCurrentImage()] = texture->GetTexture();
+    auto depthAttachmentDesc = rttPassDescriptor.depthAttachment;
+    [depthAttachmentDesc setTexture:depthAttachment];
+    [depthAttachmentDesc setLoadAction:MTLLoadActionClear];
+    [depthAttachmentDesc setStoreAction:MTLStoreActionDontCare];
+    [depthAttachmentDesc setClearDepth:0.0];
 
-    [commandEncoder setFragmentTexture:framebuffers[GetCurrentImage()] atIndex:0];
-    [commandEncoder setViewport:MTLViewport { 0, 0, (float)upscaledWidth, (float)upscaledHeight, 1, 0}];
+    auto stencilAttachmentDesc = rttPassDescriptor.stencilAttachment;
+    [stencilAttachmentDesc setTexture:depthAttachment];
+    [stencilAttachmentDesc setLoadAction:MTLLoadActionClear];
+    [stencilAttachmentDesc setStoreAction:MTLStoreActionDontCare];
+    [stencilAttachmentDesc setClearStencil:0];
+
+    currentEncoder = [commandBuffer renderCommandEncoderWithDescriptor:rttPassDescriptor];
+    [currentEncoder pushDebugGroup:@"RenderToTexture"];
+
+    MTLViewport viewport = {
+            0.0,
+            0.0,
+            (double)upscaledWidth,
+            (double)upscaledHeight,
+            1.0,
+            0.0
+    };
+    [currentEncoder setViewport:viewport];
+
     u32 minX = pvrrc.getFramebufferMinX() * upscaledWidth / origWidth;
     u32 minY = pvrrc.getFramebufferMinY() * upscaledHeight / origHeight;
     getRenderToTextureDimensions(minX, minY, widthPow2, heightPow2);
     baseScissor = MTLScissorRect { minX, minY, upscaledWidth, upscaledHeight };
-    [commandEncoder setScissorRect:baseScissor];
-    currentEncoder = commandEncoder;
+    [currentEncoder setScissorRect:baseScissor];
 
-    return commandEncoder;
+    return currentEncoder;
 }
 
 void MetalTextureDrawer::EndRenderPass()
 {
+    [currentEncoder popDebugGroup];
     [currentEncoder endEncoding];
     currentEncoder = nil;
 

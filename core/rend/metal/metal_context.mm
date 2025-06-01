@@ -23,6 +23,7 @@
 #include "sdl/sdl.h"
 #endif
 #include "ui/imgui_driver.h"
+#import "metal_buffer.h"
 
 MetalContext *MetalContext::contextInstance;
 
@@ -38,7 +39,9 @@ void MetalContext::CreateSwapChain()
     [layer setDisplaySyncEnabled:TRUE];
 
     auto size = [layer drawableSize];
-    SetWindowSize(size.width, size.height);
+    width = size.width;
+    height = size.height;
+    SetWindowSize(width, height);
     resized = false;
 
     if (swapOnVSync && config::DupeFrames && settings.display.refreshRate > 60.f)
@@ -56,7 +59,7 @@ void MetalContext::CreateSwapChain()
 
     currentImage = 2;
 
-    INFO_LOG(RENDERER, "Metal swap chain created: %d x %d, swap chain size %d", width, height, 3);
+    ERROR_LOG(RENDERER, "Metal swap chain created: %d x %d, swap chain size %d", width, height, 3);
 }
 
 bool MetalContext::init()
@@ -121,6 +124,57 @@ bool MetalContext::recreateSwapChainIfNeeded()
         return false;
 }
 
+void MetalContext::BeginRenderPass() {
+    recreateSwapChainIfNeeded();
+    if (!IsValid())
+        return;
+
+    currentDrawable = [layer nextDrawable];
+
+    if (!renderPassDescriptor) {
+        renderPassDescriptor = [[MTLRenderPassDescriptor alloc] init];
+    }
+
+    auto colorAttachment = renderPassDescriptor.colorAttachments[0];
+    [colorAttachment setTexture:currentDrawable.texture];
+    [colorAttachment setLoadAction:MTLLoadActionClear];
+    [colorAttachment setStoreAction:MTLStoreActionStore];
+    [colorAttachment setClearColor:MTLClearColorMake(0.0, 0.0, 0.0, 1.0)];
+
+    if (currentImage >= commandBuffers.size()) {
+        commandBuffers.resize(currentImage + 1);
+    }
+
+    if (!commandBuffers[currentImage]) {
+        commandBuffers[currentImage] = [queue commandBuffer];
+        [commandBuffers[currentImage] setLabel:@"Render Frame"];
+    }
+
+    commandEncoder = [commandBuffers[currentImage] renderCommandEncoderWithDescriptor: renderPassDescriptor];
+    [commandBuffers[currentImage] presentDrawable:currentDrawable];
+};
+
+void MetalContext::NewFrame() {
+    if (!IsValid())
+        return;
+
+    if (rendering) {
+        [commandEncoder endEncoding];
+        commandEncoder = nil;
+        rendering = false;
+        renderDone = true;
+    }
+
+    // Commit the current command buffer
+    if (currentImage < commandBuffers.size() && commandBuffers[currentImage]) {
+        [commandBuffers[currentImage] commit];
+        commandBuffers[currentImage] = nil;
+    }
+
+    currentImage = (currentImage + 1) % 3;
+    currentDrawable = nil;
+}
+
 void MetalContext::Present()
 {
     if (renderDone)
@@ -144,10 +198,10 @@ void MetalContext::Present()
 
 void MetalContext::DrawFrame(id<MTLTexture> texture, MTLViewport viewport, float aspectRatio) {
     MetalQuadVertex vtx[4] {
-            { -1, -1, 0, 0, 0 },
-            {  1, -1, 0, 1, 0 },
-            { -1,  1, 0, 0, 1 },
-            {  1,  1, 0, 1, 1 },
+            { -1, -1, 0, 0, 1 },
+            {  1, -1, 0, 1, 1 },
+            { -1,  1, 0, 0, 0 },
+            {  1,  1, 0, 1, 0 },
     };
     float shiftX, shiftY;
     getVideoShift(shiftX, shiftY);
@@ -171,9 +225,9 @@ void MetalContext::DrawFrame(id<MTLTexture> texture, MTLViewport viewport, float
     else
         dx = width * (1 - aspectRatio / screenAR) / 2;
 
-    MTLViewport framePort = { dx, dy, width - dx * 2, height - dx * 2, 0, 1 };
+    MTLViewport framePort = { dx, dy, width - dx * 2, height - dy * 2, 0, 1 };
     [commandEncoder setViewport:framePort];
-    [commandEncoder setScissorRect:MTLScissorRect { (uint)dx, (uint)dy, (uint)(width - dx * 2), (uint)(height - dx * 2) }];
+    [commandEncoder setScissorRect:MTLScissorRect { (uint)dx, (uint)dy, (uint)(width - dx * 2), (uint)(height - dy * 2) }];
     if (config::Rotate90)
         quadRotateDrawer->Draw(commandEncoder, texture, vtx, config::TextureFiltering == 1);
     else
@@ -190,12 +244,23 @@ void MetalContext::PresentFrame(id<MTLTexture> texture, MTLViewport viewport, fl
 
     if (texture != nil && IsValid())
     {
+        NewFrame();
+
         gui_draw_osd();
+
+        BeginRenderPass();
 
         if (lastFrameTexture != nil) // Might have been nullified if swap chain recreated
             DrawFrame(texture, viewport, aspectRatio);
 
+        [commandEncoder endEncoding];
         imguiDriver->renderDrawData(ImGui::GetDrawData(), false);
+    }
+    else {
+        if (!IsValid())
+        {
+            ERROR_LOG(RENDERER, "NOT PRESENTING INVALID SIZE!");
+        }
     }
 }
 

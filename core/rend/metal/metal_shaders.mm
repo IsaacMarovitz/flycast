@@ -496,14 +496,13 @@ struct PushBlock
 vertex VertexOut vs_main(VertexIn in [[stage_in]]) {
     VertexOut out = {};
 
-    if (rotate_quad) {
+    if (!rotate_quad) {
         out.position = float4(in.pos, 1.0);
     } else {
         out.position = float4(in.pos.y, -in.pos.x, in.pos.z, 1.0);
     }
 
     out.uv = in.uv;
-
     return out;
 }
 
