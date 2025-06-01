@@ -33,10 +33,11 @@ void MetalContext::CreateSwapChain()
 
     commandBuffers.clear();
 
-    [layer setPixelFormat:MTLPixelFormatRGBA8Unorm];
+    [layer setPixelFormat:MTLPixelFormatBGRA8Unorm];
+    [layer setFramebufferOnly:TRUE];
+    [layer setDisplaySyncEnabled:TRUE];
     [layer setColorspace:CGColorSpaceCreateWithName(kCGColorSpaceSRGB)];
     [layer setMaximumDrawableCount:3];
-    [layer setDisplaySyncEnabled:TRUE];
 
     auto size = [layer drawableSize];
     width = size.width;
