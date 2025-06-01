@@ -564,13 +564,18 @@ void MetalTextureDrawer::EndRenderPass()
 void MetalScreenDrawer::Init(MetalSamplers *samplers, MetalShaders *shaders, const MTLViewport &viewport) {
     emulateFramebuffer = config::EmulateFramebuffer;
     this->shaderManager = shaders;
+
     if (this->viewport.height != viewport.height ||
             this->viewport.width != viewport.width ||
             this->viewport.originX != viewport.originX ||
             this->viewport.originY != viewport.originY ||
             this->viewport.zfar != viewport.zfar ||
             this->viewport.znear != viewport.znear) {
-
+        depthAttachment = nil;
+        framebuffers.clear();
+        clearPassDescriptors.clear();
+        loadPassDescriptors.clear();
+        clearNeeded.clear();
     }
     this->viewport = viewport;
 
