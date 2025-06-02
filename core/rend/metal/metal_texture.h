@@ -48,8 +48,8 @@ private:
     u32 width = 0;
     u32 height = 0;
     u32 mipmapLevels = 1;
-    id<MTLCommandBuffer> commandBuffer;
-    id<MTLTexture> texture;
+    id<MTLCommandBuffer> commandBuffer = nil;
+    id<MTLTexture> texture = nil;
 };
 
 class MetalSamplers
