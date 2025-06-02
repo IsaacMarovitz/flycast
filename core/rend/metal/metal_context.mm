@@ -140,7 +140,7 @@ void MetalContext::BeginRenderPass() {
     [colorAttachment setTexture:currentDrawable.texture];
     [colorAttachment setLoadAction:MTLLoadActionClear];
     [colorAttachment setStoreAction:MTLStoreActionStore];
-    [colorAttachment setClearColor:MTLClearColorMake(0.0, 0.0, 0.0, 1.0)];
+    [colorAttachment setClearColor:MTLClearColorMake(VO_BORDER_COL.red(), VO_BORDER_COL.green(), VO_BORDER_COL.blue(), 1.0f)];
 
     if (currentImage >= commandBuffers.size()) {
         commandBuffers.resize(currentImage + 1);
