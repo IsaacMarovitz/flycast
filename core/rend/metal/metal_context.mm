@@ -19,6 +19,8 @@
 
 #include "metal_context.h"
 #include "metal_driver.h"
+
+#include <algorithm>
 #ifdef USE_SDL
 #include "sdl/sdl.h"
 #endif
@@ -37,14 +39,27 @@ void MetalContext::CreateSwapChain()
     [layer setFramebufferOnly:TRUE];
     [layer setColorspace:CGColorSpaceCreateWithName(kCGColorSpaceSRGB)];
     [layer setMaximumDrawableCount:3];
-#if TARGET_OS_MAC || TARGET_OS_MACCATALYST
+    // setDisplaySyncEnabled is exposed only on macOS and Mac Catalyst.
+    // TARGET_OS_MAC is true on every Apple platform (it's misleadingly
+    // named) so guarding on it would still hit iOS / tvOS at runtime.
+#if TARGET_OS_OSX || TARGET_OS_MACCATALYST
     [layer setDisplaySyncEnabled:TRUE];
 #endif
 
     auto size = [layer drawableSize];
-    width = size.width;
-    height = size.height;
-    SetWindowSize(width, height);
+    // Don't write the layer's drawable size straight into this->width /
+    // this->height: SetWindowSize() short-circuits when the new size
+    // matches the cached one, so the zero-size rejection (and any future
+    // resize bookkeeping inside SetWindowSize) would never fire from this
+    // path. Validate up front, then let SetWindowSize() do the assignment
+    // and propagation.
+    if (size.width <= 0 || size.height <= 0)
+    {
+        WARN_LOG(RENDERER, "Metal layer reported invalid drawable size %.0fx%.0f; skipping swap chain creation",
+                 size.width, size.height);
+        return;
+    }
+    SetWindowSize((u32)size.width, (u32)size.height);
     resized = false;
 
     if (swapOnVSync && config::DupeFrames && settings.display.refreshRate > 60.f)
@@ -234,7 +249,22 @@ void MetalContext::DrawFrame(id<MTLTexture> texture, MTLViewport viewport, float
 
     MTLViewport framePort = { dx, dy, width - dx * 2, height - dy * 2, 0, 1 };
     [commandEncoder setViewport:framePort];
-    [commandEncoder setScissorRect:MTLScissorRect { (uint)dx, (uint)dy, (uint)(width - dx * 2), (uint)(height - dy * 2) }];
+    // Clamp the scissor rect in float / signed space *before* casting to
+    // unsigned. With unusual aspect ratios or very small framebuffers the
+    // (width - dx * 2) math can land on a small negative; the float ->
+    // unsigned conversion is undefined for negatives and would wrap to a
+    // huge value that the post-cast unsigned clamp can't recover from.
+    const float sx = std::max(0.f, dx);
+    const float sy = std::max(0.f, dy);
+    const float sw = std::max(0.f, std::min((float)width  - sx, (float)width  - dx * 2));
+    const float sh = std::max(0.f, std::min((float)height - sy, (float)height - dy * 2));
+    MTLScissorRect scissor {
+        (NSUInteger)sx,
+        (NSUInteger)sy,
+        (NSUInteger)sw,
+        (NSUInteger)sh
+    };
+    [commandEncoder setScissorRect:scissor];
     if (config::Rotate90)
         quadRotateDrawer->Draw(commandEncoder, texture, vtx, config::TextureFiltering == 1);
     else
@@ -266,7 +296,11 @@ void MetalContext::PresentFrame(id<MTLTexture> texture, MTLViewport viewport, fl
     else {
         if (!IsValid())
         {
-            ERROR_LOG(RENDERER, "NOT PRESENTING INVALID SIZE!");
+            DEBUG_LOG(RENDERER, "Skipping present: invalid size %ux%u", width, height);
+        }
+        else if (texture == nil)
+        {
+            DEBUG_LOG(RENDERER, "Skipping present: no texture");
         }
     }
 }
@@ -280,6 +314,7 @@ void MetalContext::PresentLastFrame()
 void MetalContext::term() {
     GraphicsContext::instance = nullptr;
     lastFrameTexture = nil;
+    currentDrawable = nil;
     imguiDriver.reset();
     quadDrawer.reset();
     quadPipeline.reset();
@@ -298,8 +333,16 @@ bool MetalContext::HasSurfaceDimensionChanged() const
 
 void MetalContext::SetWindowSize(u32 width, u32 height)
 {
-    if (this->width != width && this->height != height)
+    // The original guard used && which only fired when *both* dimensions
+    // changed and silently dropped the window-size update otherwise.
+    if (this->width != width || this->height != height)
     {
+        // Reject obviously broken sizes early so we don't trigger Metal
+        // validation by trying to recreate the swap chain at 0x0 or at
+        // sizes Metal cannot allocate textures for.
+        if (width == 0 || height == 0)
+            return;
+
         this->width = width;
         this->height = height;
 
